@@ -1,0 +1,490 @@
+---
+title: "Final Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=TRUE}
+#install.packages("stats19")
+#install.packages("sugrrants")
+#install.packages("tidyverse")
+#install.packages("sf")
+#install.packages("lubridate")
+library(plotly)
+library(ggplot2)
+library(stats19)
+library(sugrrants)
+library(tidyverse)
+library(sf)
+library(lubridate)
+```
+
+```{r, echo=TRUE, eval=TRUE}
+
+A <- read.csv("~/SharedFiles/ST606/2020/data/UKroadsafety/dftRoadSafetyData_Accidents_2018.csv")
+C <- read.csv("~/SharedFiles/ST606/2020/data/UKroadsafety/dftRoadSafetyData_Casualties_2018.csv")
+V <- read.csv("~/SharedFiles/ST606/2020/data/UKroadsafety/dftRoadSafetyData_Vehicles_2018.csv")
+
+
+
+# View(A) #Accident 
+# View(C) #Casualities
+# View(V) #Vehicles
+
+
+nrow(A) #no. of rows
+
+#view columns names
+column_names = names(A)
+length(column_names)
+column_names
+length(rownames)
+glimpse(A)
+#55 rows with no coordinates found and removed in crashes_sf
+
+#sf_Format convert STATS19 data into spatial (sf) object
+# provides the data in lon/lat format
+crashes_sf = format_sf(A)
+glimpse(crashes_sf)
+
+# counting and plotting the number of fatalities per police force
+glimpse(A) #Accident data
+
+A_for<-format_accidents(crashes_sf)  #date time format column will be added in the data (Format STATS19 'accidents' data)
+
+glimpse(A_for) #Checking after formatting
+
+unique(A_for$police_force)
+#view(A_for)
+#counting and plotting the number of fatalities per police force ()
+
+par(mfrow=c(1,3))
+glimpse(crashes_sf)
+
+#ploce_boundaries()- The geographic boundary data were taken from the UK government's official geographic data portal
+#Plot for slight injuries
+
+A_for %>% 
+  filter(accident_severity == "Slight") %>% 
+  select(Slight_Injuries = accident_index) %>% 
+  aggregate(by = police_boundaries, FUN = length) %>% 
+  plot()
+
+
+#plot for serious injuries
+A_for %>% 
+  filter(accident_severity == "Serious") %>% 
+  select(num_of_serious_cases = accident_index) %>% 
+  aggregate(by = police_boundaries, FUN = length) %>% 
+  plot()
+
+#plot for fatalities
+A_for %>% 
+  filter(accident_severity == "Fatal") %>% 
+  select(Number_of_Fatalities = accident_index) %>% 
+  aggregate(by = police_boundaries, FUN = length) %>% 
+  plot()
+
+
+names(crashes_sf)
+
+#glimpse(crashes_sf)
+
+
+head(crashes_sf)
+
+```
+
+```{r}
+
+crash_table<-sort(table(A_for$day_of_week)) #Table for week when crashes occur
+
+#barplot for days (which is the day when maximum crashes occur)
+barplot(crash_table,
+main="Count of Crashes on Days",
+ylab="Count",
+border="red",
+col="blue",
+density= 10,
+las=2
+)
+```
+```{r}
+#glimpse(A_for)
+A_for %>%  st_set_geometry(NULL) %>%
+  group_by(day_of_week) %>% summarize(num_accs=n()) %>% 
+  mutate(Day_of_Week=c("Sunday","Monday","Tuesday","Wednesday",
+                       "Thursday","Friday","Saturday")) %>%
+  mutate(prop=paste(round(100*num_accs/sum(num_accs),2),"%"))
+
+
+
+#Drivers in road accidents split by sex
+V %>% group_by(Sex_of_Driver) %>% summarize(num_accs=n()) %>% 
+  mutate(Sex_of_Driver=c("Data Missing","Male","Female","Unknown")) %>% 
+  mutate(prop=paste(round(100*num_accs/sum(num_accs),2),"%"))
+
+paste("The data suggests that women are less likely to be drivers in a road accident. I think of two possible explanations for this: women are better drivers or there are significantly less female drivers on the road.")
+
+
+
+# number of accidents by hour for each day of the week (Check for some missing date values to remove filter(hour!=NULL))
+hourly_data <-mutate(A_for,day=weekdays(date),hour=substring(time,1,2)) %>% 
+  arrange(day_of_week) %>%
+  st_set_geometry(NULL) %>%
+  group_by(day, hour) %>% summarize(num_accs=n()) %>% 
+  mutate(prop=round(100*num_accs/sum(num_accs), 1)) %>%
+  filter(hour!="") 
+
+hourly_data
+
+sum(hourly_data$num_accs)
+nrow(A_for)
+
+#format_axis is a function to format axis below 
+
+# plot_ly(hourly_data %>% 
+#           group_by(day, hour) %>% summarize(tot=sum(num_accs)) %>% 
+#           mutate(prop=round(100*tot/sum(tot), 1)),
+#         x=~hour,y=~prop, color =~day, type = "scatter", mode = "lines") %>%
+#   add_trace(data=hourly_data %>% group_by(hour) %>% 
+#               summarize(tot=sum(num_accs)) %>% 
+#               mutate(prop=round(100*tot/sum(tot), 1)),
+#             x=~hour,y=~prop,name="All Days",
+#             line=list(width=3))
+
+
+
+
+
+```
+
+```{r}
+#Barplot Days, sum(no. of casuality) (Which are the days of week when most no. of casualities occur)
+
+sum_casual <- A_for %>%
+  st_set_geometry(NULL) %>%
+	group_by(day_of_week) %>%
+	summarise(Casualities = sum(number_of_casualties))
+
+
+
+ggplot(sum_casual, aes(reorder(x = day_of_week , -Casualities), y = Casualities, fill=day_of_week)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label=Casualities), position=position_dodge(width=0.9), vjust=-0.35,hjust=.5)+
+    theme_classic() +
+    labs(
+        x = "Days",
+        y = "number of casualities",
+        title = "Number of casulaities on days in descending order"
+        )
+
+#analysis can be written on the basis of above 2 barplots
+
+
+```
+
+```{r}
+
+V_for<-format_vehicles(V)
+glimpse(V_for)
+
+
+C_for<-format_casualties(C)
+glimpse(C_for)
+
+
+####
+
+casualities = A_for %>% 
+  st_set_geometry(NULL) %>% 
+  group_by(date) %>% 
+  summarise(
+    Fatal = sum(accident_severity=='Fatal'),
+    Slight = sum(accident_severity=='Slight'),
+    Serious = sum(accident_severity=='Serious')
+    ) %>% 
+    tidyr::gather(accident_severity, no_of_casualities, -date)
+
+cas_TS<-ggplot(casualities, aes(date, no_of_casualities)) +
+  geom_smooth(aes(colour = accident_severity), method = "loess") +
+  ylab("Casualties per day")
+
+ggplotly(cas_TS) 
+
+#use of sugrrants to plot no. of accidents w.r.t time pn calendar based graph
+#glimpse(A_for)
+#glimpse(A_for)
+
+#A_for %>%
+#  group_by(dttm=floor(datetime)) %>%
+#  summarize(noc=sum(number_of_casualties))
+
+#suggrnts with free scale
+
+ps <- A_for %>%
+  mutate(Weekend = if_else(day_of_week %in% c("Saturday", "Sunday"), "Weekend", "Weekday")) %>%
+  frame_calendar(x = time, y = number_of_casualties, date = date, calendar = "monthly") %>% 
+  ggplot(aes(x = .time, y = .number_of_casualties, group = date, colour = Weekend)) +
+  geom_line() +
+  theme(legend.position = "bottom")
+prettify(ps)
+
+
+
+
+#browseVignettes("sugrrants")
+# #Sum2 <- aggregate(A_for["no_of_cas"], 
+#                  list(hour=cut(as.POSIXct(A_for$datetime)-1, "hour")),
+#                  sum)
+
+
+#glimpse(A_for)
+
+
+
+#Aggreagte by hour code 
+
+#  aggregate(A_for["no_of_cas"], 
+#                 list(hour=cut(as.POSIXct(A_for$datetime)-1, "hour")),sum)
+#Time series prediction
+
+#Acc_part<-A_for %>% st_set_geometry(NULL) %>% select(accident_index, number_of_casualties, date, time, day_of_week)
+
+#Acc_part$time_slot <-as.numeric(substr(Acc_part$time,0,2))
+
+
+
+
+
+#making a column with datetime on hours based
+A_for$datetime1 <- droplevels(cut(A_for$datetime, breaks='hour'))
+
+
+newdf<- A_for%>%
+  st_set_geometry(NULL)  %>% select(accident_index,datetime1, number_of_casualties, day_of_week, date)%>%
+mutate(Weekend = if_else(day_of_week %in% c("Saturday", "Sunday"), "Weekend", "Weekday")) %>%
+group_by(datetiem2= fct_explicit_na(datetime1), day_of_week, date) %>%
+  summarize(total_accidents=n_distinct(accident_index)) 
+
+#newdf$date<-as.Date(as.character(newdf$datetiem2, format = "%m/%d/%Y"))
+#newdf[max(newdf$total_accidents),]
+
+
+#suggrants aggreagted by hour w.r.t total accidents per hour
+ps <- newdf %>%
+  group_by(day_of_week, date)%>%
+  mutate(Weekend = if_else(day_of_week %in% c("Saturday", "Sunday"), "Weekend", "Weekday")) %>%
+  frame_calendar(x = datetiem2, y = total_accidents, date = date, calendar = "monthly", scale = "free", ncol=4) %>% 
+  ggplot(aes(x = .datetiem2, y = .total_accidents, group = date, colour = Weekend)) +
+  geom_line() +
+  theme(legend.position = "bottom")
+prettify(ps)
+
+
+
+
+```
+
+
+
+```{r}
+
+#Checking for NA's value
+
+sort(sapply(A_for, function(x) sum(is.na(x))),decreasing = TRUE)
+
+#EDA
+
+#1- Number of accident in particular week day(first one is with reference of no, of casulaities. Below graph is based on Number of accident).
+
+noa<- A_for %>% 
+  group_by(day_of_week) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+    ggplot(aes(x=day_of_week, y=total_accidents)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=total_accidents), vjust=1.6, color="white", size=3.5)
+
+noa
+
+#Accident by hours
+
+#for time slot
+A_for$time_slot <-as.numeric(substr(A_for$time,0,2))
+
+A_for %>% 
+  group_by(time_slot) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+    ggplot(aes(x=time_slot, y=total_accidents)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=total_accidents), vjust=1.6, color="black", size=3)+
+    scale_x_continuous(breaks = round(seq(0, 24, by = 1),0)) +
+    ggtitle("Total Accidents by Hours ") +
+    xlab("Hours") + ylab("Total Accidents")+
+    theme(plot.title = element_text(hjust = 0.5), panel.background = element_blank())
+
+paste("From hours distribution of accidents it is clear that accidents tend to occur on the business hours when people commute to work.")
+
+
+#Slight Accident by hours
+
+A_for %>% 
+  filter(accident_severity=="Slight")%>%
+  group_by(time_slot) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+    ggplot(aes(x=time_slot, y=total_accidents)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=total_accidents), vjust=1.6, color="black", size=3)+
+    scale_x_continuous(breaks = round(seq(0, 24, by = 1),0)) +
+    ggtitle("Total Slight Accidents by Hours ") +
+    xlab("Hours") + ylab("Total Accidents")+
+    theme(plot.title = element_text(hjust = 0.5), panel.background = element_blank())
+
+#serious accidents by hours
+
+A_for %>% 
+  filter(accident_severity=="Serious")%>%
+  group_by(time_slot) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+    ggplot(aes(x=time_slot, y=total_accidents)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=total_accidents), vjust=1.6, color="black", size=3)+
+    scale_x_continuous(breaks = round(seq(0, 24, by = 1),0)) +
+    ggtitle("Total Serious Accidents by Hours ") +
+    xlab("Hours") + ylab("Total Accidents")+
+    theme(plot.title = element_text(hjust = 0.5), panel.background = element_blank())
+
+#Fatal accidents by hours
+A_for %>% 
+  filter(accident_severity=="Fatal")%>%
+  group_by(time_slot) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+    ggplot(aes(x=time_slot, y=total_accidents)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=total_accidents), vjust=1.6, color="black", size=3)+
+    scale_x_continuous(breaks = round(seq(0, 24, by = 1),0)) +
+    ggtitle("Total Fatal Accidents by Hours") +
+    xlab("Hours") + ylab("Total Accidents")+
+    theme(plot.title = element_text(hjust = 0.5), panel.background = element_blank())
+
+
+#Contigency table to look the relationship between accidents by hours to check the accident time and severity.
+
+acc_time<-table(A_for$time_slot,A_for$accident_severity)
+prop.table(acc_time,1)
+
+("write interpretation of the prop_table")
+
+#chi-square test for acc_time vs severity
+paste("NULL hypthesis : Accident severity is independent of time.
+      HA : accident severity is dependent on time")
+
+
+chisq.test(acc_time) 
+
+paste("The p-value is significantly less than 0.05, we reject with the Null hypothesis that the accident severity is independent of the hours.")
+
+#We can do the same for others variables.
+
+#Weekend Night accident (Friday night to saturday morning 5, saturday night to sunday morning )
+#General assumption is people drink and drive on weekends
+
+A_for$WE_night<-ifelse((A_for$day_of_week=="Friday" & A_for$time_slot %in% c(21:23)) | 
+                                A_for$day_of_week=="Saturday" & A_for$time_slot %in% c(21:23,0:5) |
+                                  A_for$day_of_week=="Sunday" & A_for$time_slot %in% c(0:5),"Yes","No")
+
+A_for %>% 
+  group_by(WE_night,accident_severity) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+  mutate(freq =  round((100*total_accidents / sum(total_accidents)),digits = 2)) %>%
+    ggplot(aes(x=accident_severity, y=freq,fill=WE_night)) +
+    geom_bar(stat="identity", position="dodge")+
+    geom_text(aes(label=freq), vjust=2, color="black", size=3, position=position_dodge(width=0.9))+
+    ggtitle("Accident Severity on WE-Night vs non WE-Night") +
+    xlab("Accident Severity") + ylab("Accident Proportion in %")
+
+#?percent
+
+paste("There is a clear differnece between weekend nights and non-weekend nights accidents. In case of weekend nights 
+      fatal and serious accidents occur more but in case of slight more accidents took place in non-weekend nights. we         discovered that there’s more accidents during the rush hour time (4pm-6pm)")
+
+#Accident based on Weather conditions 
+
+#glimpse(A_for)
+
+A_for %>% 
+  group_by(weather_conditions,accident_severity) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+  mutate(freq = round((100*total_accidents / sum(total_accidents)),digits=2)) %>%
+    ggplot(aes(x=accident_severity, y=freq, fill=weather_conditions)) +
+    geom_bar(stat="identity", position="dodge")+
+    ggtitle("Accident Severity Proportion by Weather conditions") +
+    xlab("Accident Severity") + ylab("Accident Percentage")
+
+
+paste("slight severity accident are not dependent on weather conditions whereas there are more chances of fatal and slight accidents in foggy or misty weather when the visibility is not clear")
+
+#Accident severity by light condition
+A_for %>% 
+  group_by(light_conditions,accident_severity) %>% 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+  mutate(freq = round((100*total_accidents / sum(total_accidents)),digits=2)) %>%
+    ggplot(aes(x=accident_severity, y=freq, fill=light_conditions)) +
+    geom_bar(stat="identity", position="dodge")+
+    ggtitle("Accident Severity Proportion by Light conditions") +
+    xlab("Accident Severity") + ylab("Accident Percentage")
+
+
+#Accident severity by area type
+
+                         
+
+A_for %>% 
+  group_by(urban_or_rural_area,accident_severity) %>%   
+    filter(urban_or_rural_area!="Unallocated")%>%         #removing unallocated area 
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+  mutate(freq = round((100*total_accidents / sum(total_accidents)),digits=2)) %>%
+    ggplot(aes(x=accident_severity, y=freq, fill=urban_or_rural_area)) +
+    geom_bar(stat="identity", position="dodge")+
+  geom_text(aes(label=freq), vjust=2, color="black", size=3, position=position_dodge(width=0.9))+
+    ggtitle("Accident Severity Percentage by Area Type") +
+    xlab("Accident Severity") + ylab("Accident Severity %")
+ 
+
+glimpse(A_for)
+   
+#Accident Severity by Junction Type
+  
+#junction_detail                             
+A_for %>% 
+  group_by(junction_detail,accident_severity) %>%   
+    filter(junction_detail!="Data missing or out of range")%>%
+  summarize(total_accidents=n_distinct(accident_index)) %>%
+  mutate(freq = round((100*total_accidents / sum(total_accidents)),digits = 2)) %>%
+    ggplot(aes(x=accident_severity, y=freq, fill=junction_detail)) +
+    geom_bar(stat="identity", position="dodge")+
+    ggtitle("Accident Severity % by Junction") +
+    xlab("Accident Severity") + ylab("Accident Severity %")
+    
+
+paste(" Accident happening on a roundabout is much more likely to be a slight accident and not likely at all to be a fatal accident. probability of an accident to be fatal is higher on road that ar enot a junction or within 20 metres of a junction.  ")
+
+
+```
+
+```{r}
+
+#model fitting
+
+
+
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
